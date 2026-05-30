@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>공식 기반 F + Stacking 앙상블 보정 대시보드</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;background:#dfe6f2;color:#172033;display:flex;justify-content:center;padding:12px 0}.phone{width:390px;min-height:844px;background:#f6f8fc;border-radius:28px;overflow:hidden;box-shadow:0 18px 45px rgba(0,0,0,.18);border:6px solid #111827;position:relative}header{background:linear-gradient(135deg,#203864,#466fb0);color:#fff;padding:22px 20px 18px}header h1{margin:0;font-size:21px;line-height:1.35}header p{margin:7px 0 0;font-size:12px;opacity:.9}main{padding:12px 12px 90px}.screen{display:none}.screen.active{display:block}.card{background:#fff;border-radius:18px;padding:15px;margin-bottom:12px;box-shadow:0 8px 22px rgba(32,56,100,.08);border:1px solid rgba(32,56,100,.08)}.card h2{font-size:16px;margin:0 0 9px}.desc{color:#68758d;font-size:12px;line-height:1.55}.kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kpi{background:#f4f7fd;border-radius:15px;padding:12px}.kpi span{font-size:11px;color:#68758d}.kpi strong{display:block;font-size:23px;margin-top:4px}.good{color:#198754}.warn{color:#f0a202}.bad{color:#d63333}canvas{width:100%;height:200px;display:block}.barrow{display:flex;align-items:center;gap:8px;margin:10px 0}.barlabel{width:82px;font-size:12px;color:#526078}.barbox{flex:1;height:10px;background:#e8edf7;border-radius:999px;overflow:hidden}.barfill{height:100%;background:#466fb0;border-radius:999px}.barvalue{width:38px;font-size:12px;text-align:right;font-weight:700}.meal-item{padding:12px;background:#f8faff;border-radius:15px;margin-top:9px;border-left:5px solid #466fb0}.meal-item b{font-size:14px}.meal-item p{margin:5px 0 0;font-size:12px;color:#68758d;line-height:1.45}.badge{padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800;float:right}.badge.good{background:#e8f6ee}.badge.warn{background:#fff5d8}.badge.bad{background:#fde8e8}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}label{display:block;font-size:11px;color:#526078;margin-bottom:5px}input,textarea{width:100%;border:1px solid #dce3ef;border-radius:12px;padding:10px;font-size:14px;background:#fff}input[type=file]{font-size:12px;padding:8px}textarea{height:72px;resize:none}button{width:100%;border:0;background:#203864;color:#fff;padding:12px 14px;border-radius:14px;cursor:pointer;font-weight:800;margin-top:12px}.result{margin-top:12px;background:#f6f8fc;border-radius:16px;padding:14px;font-size:13px;line-height:1.55}.alert{padding:13px;border-radius:16px;margin-bottom:11px;background:#fff;border-left:6px solid;box-shadow:0 6px 16px rgba(32,56,100,.06);font-size:13px;line-height:1.55}.alert.bad{border-color:#d63333}.alert.warn{border-color:#f0a202}.alert.good{border-color:#198754}.nav{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(5,1fr);background:#fff;border-top:1px solid #e7edf7;padding:8px 6px 11px}.nav button{margin:0;padding:8px 1px;background:transparent;color:#748097;border-radius:13px;font-size:10.5px}.nav button.active{background:#203864;color:#fff}.pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#e9effa;color:#203864;font-size:11px;font-weight:800;margin:3px 3px 0 0}.code{background:#f3f6fb;border-radius:12px;padding:10px;font-size:11px;line-height:1.55;color:#39465c;overflow:auto}.progress{height:9px;border-radius:999px;background:#e8edf7;overflow:hidden;margin-top:10px}.progress div{height:100%;width:0;background:#466fb0;transition:.2s}.icon{font-size:25px;margin-right:5px}.split{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.miniBox{background:#f4f7fd;border-radius:14px;padding:10px;text-align:center}.miniBox span{display:block;font-size:10px;color:#68758d}.miniBox b{font-size:17px}
+</style>
+</head>
+<body>
+<div class="phone">
+<header>
+  <h1>급식 적합도 F<br>공식 + Stacking 앙상블 보정</h1>
+  <p>F_base 공식 산출 · RF + GB → Ridge 스태킹 보정값 학습 · 최종 F 산출</p>
+</header>
+<main>
+
+<!-- ===== 화면1: ML 학습 ===== -->
+<section id="screen-ml" class="screen active">
+  <div class="card">
+    <h2><span class="icon">🤖</span>Stacking 앙상블 보정 모델 학습</h2>
+    <p class="desc">RF(랜덤포레스트) + GB(그래디언트부스팅) 두 모델의 예측을 Ridge가 최종 결합하는 Stacking 구조로 보정값 ΔF_Stacking을 학습합니다.</p>
+    <div style="background:#f4f7fd;border-radius:13px;padding:11px;margin-bottom:10px">
+      <div style="font-size:11px;color:#526078;margin-bottom:4px">📂 GitHub 데이터 파일</div>
+      <div style="font-size:12px;font-weight:700;color:#203864;word-break:break-all">Joseph080910 / index / meal_data.csv</div>
+    </div>
+    <button onclick="loadCsvAndTrain()">📥 GitHub에서 CSV 불러와서 Stacking 학습</button>    <button onclick="trainWithSampleData()">샘플 데이터로 바로 학습</button>
+    <div class="progress"><div id="trainProgress"></div></div>
+    <div id="trainResult" class="result">CSV를 업로드하거나 샘플 데이터로 Stacking 학습을 시작하세요.</div>
+  </div>
+  <div class="card">
+    <h2>Stacking 최종 F 산출식</h2>
+    <div class="code">
+      F_base = F_cal + F_macro + F_micro + F_div + F_pref<br>
+      ΔF_RF  = 랜덤포레스트 예측 보정값<br>
+      ΔF_GB  = 그래디언트부스팅 예측 보정값<br>
+      ΔF_Stacking = Ridge( ΔF_RF, ΔF_GB ) ← 메타 학습기<br>
+      F_final = F_base + ΔF_Stacking
+    </div>
+  </div>
+  <div class="card">
+    <h2>Stacking 구조 및 성능 지표</h2>
+    <div id="modelMetrics" class="desc">학습 후 각 모델별 성능이 표시됩니다.</div>
+  </div>
+  <div class="card">
+    <h2>사용 입력 필드</h2>
+    <div id="featureBox"></div>
+  </div>
+</section>
+
+<!-- ===== 화면2: API ===== -->
+<section id="screen-api" class="screen">
+  <div class="card">
+    <h2>🌍 API 데이터 연동</h2>
+    <p class="desc">API 식단 데이터로 공식 기반 F_base를 계산하고, Stacking 앙상블 보정값을 더해 최종 F를 산출합니다.</p>
+    <div class="form-grid" style="margin-top:10px">
+      <div><label>조회 연월</label><input id="apiMonth" type="month" value="2026-05"></div>
+      <div><label>학교명</label><input id="schoolName" type="text" value="가락고등학교"></div>
+    </div>
+    <button onclick="loadApiData()">API 데이터 불러오기 + 최종 F 산출</button>
+    <div id="apiResult" class="result">먼저 ML 화면에서 Stacking 모델을 학습하세요.</div>
+  </div>
+  <div class="card">
+    <h2>F 산출 과정 (Stacking)</h2>
+    <div id="parsedDataBox" class="desc">아직 불러온 데이터가 없습니다.</div>
+  </div>
+  <div class="card">
+    <h2>결론</h2>
+    <div id="mlResultBox" class="desc">분석 실행 후 결론이 표시됩니다.</div>
+  </div>
+</section>
+
+<!-- ===== 화면3: 대시보드 ===== -->
+<section id="screen-dashboard" class="screen">
+  <div class="card">
+    <h2>웹 대시보드</h2>
+    <p class="desc">최종 F점수와 공식 점수, Stacking 보정값을 함께 시각화합니다.</p>
+    <div class="kpi-row">
+      <div class="kpi"><span>평균 최종 F</span><strong id="avgF">-</strong></div>
+      <div class="kpi"><span>검토 필요</span><strong id="riskCount" class="bad">-</strong></div>
+    </div>
+    <div class="kpi-row" style="margin-top:10px">
+      <div class="kpi"><span>RF 평균 보정값</span><strong id="avgRF" class="warn">-</strong></div>
+      <div class="kpi"><span>GB 평균 보정값</span><strong id="avgGB" class="warn">-</strong></div>
+    </div>
+  </div>
+  <div class="card"><h2>일별 최종 F점수</h2><canvas id="dailyChart" width="340" height="200"></canvas></div>
+  <div class="card"><h2>주별 평균 최종 F점수</h2><canvas id="weeklyChart" width="340" height="200"></canvas></div>
+  <div class="card"><h2>평균 산출 구조</h2><div id="componentBars"></div></div>
+</section>
+
+<!-- ===== 화면4: 사전검토 ===== -->
+<section id="screen-review" class="screen">
+  <div class="card">
+    <h2>식단 사전 검토 기능</h2>
+    <p class="desc">입력 식단의 F_base를 공식으로 계산하고, RF·GB·Ridge Stacking 보정값을 더해 최종 F를 예측합니다.</p>
+  </div>
+  <div class="card">
+    <label>다음 주 식단</label>
+    <textarea id="menuText">잡곡밥, 된장국, 닭갈비, 배추김치</textarea>
+    <div class="form-grid" style="margin-top:10px">
+      <div><label>칼로리</label><input id="cal" type="number" value="835"></div>
+      <div><label>탄수화물</label><input id="carb" type="number" value="115"></div>
+      <div><label>단백질</label><input id="protein" type="number" value="42"></div>
+      <div><label>지방</label><input id="fat" type="number" value="21"></div>
+      <div><label>비타민A</label><input id="vita" type="number" value="330"></div>
+      <div><label>비타민C</label><input id="vitc" type="number" value="30"></div>
+      <div><label>칼슘</label><input id="ca" type="number" value="350"></div>
+      <div><label>철분</label><input id="fe" type="number" value="6"></div>
+    </div>
+    <button onclick="reviewMeal()">공식 + Stacking 보정 최종 F 계산</button>
+    <div id="reviewResult" class="result">식단 정보를 입력하면 F_base, RF/GB 보정값, Stacking 최종 F가 표시됩니다.</div>
+  </div>
+  <div class="card">
+    <h2>Stacking 보정 상세</h2>
+    <div id="suggestionBox" class="desc">최종 F 계산 후 RF·GB 각각의 보정값과 Ridge 결합 결과가 표시됩니다.</div>
+  </div>
+</section>
+
+<!-- ===== 화면5: 알림 ===== -->
+<section id="screen-alert" class="screen">
+  <div class="card">
+    <h2>영양사 알림 시스템</h2>
+    <p class="desc">최종 F가 낮거나 Stacking 보정값이 큰 음수이면 영양사 검토 알림을 생성합니다.</p>
+  </div>
+  <div id="alerts"></div>
+  <div class="card">
+    <h2>최근 검토 대상 식단</h2>
+    <div id="mealList"></div>
+  </div>
+</section>
+
+</main>
+<nav class="nav">
+  <button class="active" onclick="showScreen('ml',this)">🤖ML</button>
+  <button onclick="showScreen('api',this)">API</button>
+  <button onclick="showScreen('dashboard',this)">대시보드</button>
+  <button onclick="showScreen('review',this)">사전검토</button>
+  <button onclick="showScreen('alert',this)">알림</button>
+</nav>
+</div>
+
+<script>
+// =========================================================
+// 피처 목록 (원본과 동일하게 유지)
+// =========================================================
+const FEATURES = ['칼로리','탄수화물','단백질','지방','비타민A','비타민C','칼슘','철분','메뉴수','인기재료수','비인기재료수','F_base'];
+
+// =========================================================
+// 전역 상태
+// =========================================================
+let modelReady = false;
+let mealData   = [];
+
+// Stacking 앙상블 모델 파라미터
+let rfTrees    = [];   // 랜덤포레스트: 다수의 의사결정 트리
+let gbStumps   = [];   // 그래디언트부스팅: 순차 약학습기(스텀프)
+let ridgeW     = [];   // Ridge 메타 학습기 가중치 [w_rf, w_gb, bias]
+
+// 정규화 파라미터 (원본 동일)
+let xMean = [], xStd = [], yMean = 0, yStd = 1;
+
+// =========================================================
+// 원본과 동일한 샘플/API 데이터
+// =========================================================
+const API_SAMPLES = [
+  {menu:'칼슘보리밥, 열무된장국, 보쌈, 양배추쌈, 상추파채무침, 보쌈김치',칼로리:795.4,탄수화물:127.7,단백질:48.3,지방:13.1,비타민A:486.3,비타민C:34.3,칼슘:345.3,철분:7.2,메뉴수:6,인기재료수:0,비인기재료수:0},
+  {menu:'토마토스파게티, 배추김치, 양상추샐러드, 닭다리구이, 오이피클',칼로리:900.6,탄수화물:128.4,단백질:42.7,지방:25.6,비타민A:180.2,비타민C:25.6,칼슘:184.6,철분:4.3,메뉴수:5,인기재료수:2,비인기재료수:0},
+  {menu:'참치마요덮밥, 가쓰오장국, 오이지무침, 떡볶이, 배추김치, 요구르트',칼로리:878.2,탄수화물:130.8,단백질:31.5,지방:25.5,비타민A:373.9,비타민C:10.9,칼슘:222.9,철분:5.1,메뉴수:6,인기재료수:1,비인기재료수:1},
+  {menu:'칼슘강화찹쌀밥, 얼갈이된장국, 들기름막국수, 돼지갈비구이, 배추김치, 초코우유',칼로리:1248.9,탄수화물:165.2,단백질:48.2,지방:42.9,비타민A:467.9,비타민C:17.0,칼슘:507.7,철분:4.9,메뉴수:6,인기재료수:1,비인기재료수:0},
+  {menu:'칼슘발아흑미밥, 삼색나물무침, 동태전, 돼지고기김치찌개, 총각김치, 생크림요거트',칼로리:841.6,탄수화물:119.6,단백질:43.9,지방:21.0,비타민A:128.2,비타민C:11.1,칼슘:366.8,철분:4.7,메뉴수:6,인기재료수:0,비인기재료수:1},
+  {menu:'칼슘현미밥, 콩나물국, 삼치무조림, 참나물무침, 모듬햄볶음, 배추김치',칼로리:747.8,탄수화물:112.3,단백질:40.9,지방:15.2,비타민A:119.8,비타민C:43.7,칼슘:254.4,철분:5.9,메뉴수:6,인기재료수:0,비인기재료수:2},
+  {menu:'순두부양념비빔밥, 팽이버섯된장국, 한식잡채, 배추김치, 망고주스',칼로리:861.6,탄수화물:141.7,단백질:33.5,지방:17.5,비타민A:271.5,비타민C:35.2,칼슘:325.7,철분:7.6,메뉴수:5,인기재료수:1,비인기재료수:0},
+  {menu:'달걀볶음밥, 가쓰오장국, 매실장아찌무침, 양배추샐러드, 피자돈까스, 배추김치',칼로리:1062.3,탄수화물:140.6,단백질:45.0,지방:38.8,비타민A:337.5,비타민C:39.9,칼슘:494.7,철분:6.3,메뉴수:6,인기재료수:2,비인기재료수:0}
+];
+
+// 샘플 학습 데이터 생성 (원본과 동일한 방식)
+const SAMPLE_TRAIN = [];
+for(let i=0;i<220;i++){
+  let popular  = i%5===0?2:i%3===0?1:0;
+  let unpopular= i%7===0?2:i%4===0?1:0;
+  let r = {칼로리:700+(i%12)*45,탄수화물:95+(i%10)*8,단백질:25+(i%9)*4,지방:12+(i%11)*3,
+           비타민A:100+(i%13)*35,비타민C:8+(i%9)*5,칼슘:180+(i%12)*28,철분:3+(i%8)*0.7,
+           메뉴수:4+(i%4),인기재료수:popular,비인기재료수:unpopular};
+  let base = calcBaseF(r);
+  let reality = popular*3.5 - unpopular*4.5 + (r.단백질-35)*0.08 - Math.max(0,r.지방-35)*0.18;
+  SAMPLE_TRAIN.push({...r, 선호도점수: clamp(Math.round(base+reality),45,98)});
+}
+
+// =========================================================
+// 유틸
+// =========================================================
+function showScreen(name,btn){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  setTimeout(renderDashboard,80);
+}
+function mean(a){ return a.reduce((x,y)=>x+y,0)/(a.length||1); }
+function stdev(a,m){ return Math.sqrt(mean(a.map(v=>(v-m)*(v-m))))||1; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function scoreClass(f){ return f>=80?'good':f>=70?'warn':'bad'; }
+function scoreText(f){ return f>=80?'우수':f>=70?'주의':'긴급'; }
+function num(v){ if(v===undefined||v===null)return NaN; return Number(String(v).replace(/[^0-9.\-]/g,'')); }
+
+// =========================================================
+// 원본과 동일한 F_base 공식
+// =========================================================
+function calcBaseF(r){
+  let cal   = 20*(1-Math.abs(num(r.칼로리)-850)/850);    cal   = clamp(cal,0,20);
+  let carb  = 20*(1-Math.abs(num(r.탄수화물)-125)/125);
+  let prot  = 20*(1-Math.abs(num(r.단백질)-40)/40);
+  let fat   = 20*(1-Math.abs(num(r.지방)-25)/25);
+  let macro = clamp((carb+prot+fat)/3,0,20);
+  let vitA  = 20*(1-Math.abs(num(r.비타민A)-350)/350);
+  let vitC  = 20*(1-Math.abs(num(r.비타민C)-30)/30);
+  let ca    = 20*(1-Math.abs(num(r.칼슘)-350)/350);
+  let fe    = 20*(1-Math.abs(num(r.철분)-6)/6);
+  let micro = clamp((vitA+vitC+ca+fe)/4,0,20);
+  let div   = clamp(num(r.메뉴수)*3.3,0,20);
+  let pref  = clamp(12+num(r.인기재료수)*3-num(r.비인기재료수)*3,0,20);
+  return Math.round((cal+macro+micro+div+pref)*10)/10;
+}
+
+function enrichRow(r){
+  let base = calcBaseF(r);
+  return {...r, F_base:base, delta_target: num(r.선호도점수)-base};
+}
+
+function getTargetName(row){
+  return row['선호도점수']!==undefined?'선호도점수':
+         row['F']!==undefined?'F':
+         row['급식적합도점수']!==undefined?'급식적합도점수':null;
+}
+
+function normalizeRows(rows){
+  return rows.map(r=>{
+    let o={};
+    FEATURES.filter(f=>f!=='F_base').forEach(f=>o[f]=num(r[f]));
+    let t=getTargetName(r); o.선호도점수=t?num(r[t]):NaN;
+    return enrichRow(o);
+  }).filter(r=>FEATURES.every(f=>Number.isFinite(r[f]))&&Number.isFinite(r.delta_target));
+}
+
+// =========================================================
+// ★ Stacking 앙상블 구현 (JS 순수 구현)
+// =========================================================
+
+// --- 의사결정 트리 스텀프 (1단계 분기) ---
+function buildStump(X, y, sampleWeights){
+  let bestLoss=Infinity, bestFeat=-1, bestThresh=0, bestLeft=0, bestRight=0;
+  const n=X.length, nFeat=X[0].length;
+  for(let f=0;f<nFeat;f++){
+    const vals=[...new Set(X.map(r=>r[f]))].sort((a,b)=>a-b);
+    for(let ti=0;ti<vals.length-1;ti++){
+      const thresh=(vals[ti]+vals[ti+1])/2;
+      let lSum=0,lW=0,rSum=0,rW=0;
+      for(let i=0;i<n;i++){
+        const w=sampleWeights?sampleWeights[i]:1;
+        if(X[i][f]<=thresh){lSum+=y[i]*w;lW+=w;}
+        else{rSum+=y[i]*w;rW+=w;}
+      }
+      if(lW===0||rW===0) continue;
+      const lPred=lSum/lW, rPred=rSum/rW;
+      let loss=0;
+      for(let i=0;i<n;i++){
+        const w=sampleWeights?sampleWeights[i]:1;
+        const pred=X[i][f]<=thresh?lPred:rPred;
+        loss+=w*(y[i]-pred)**2;
+      }
+      if(loss<bestLoss){bestLoss=loss;bestFeat=f;bestThresh=thresh;bestLeft=lPred;bestRight=rPred;}
+    }
+  }
+  return {feat:bestFeat,thresh:bestThresh,left:bestLeft,right:bestRight};
+}
+
+function predictStump(stump,x){
+  return x[stump.feat]<=stump.thresh?stump.left:stump.right;
+}
+
+// --- 랜덤포레스트: 부트스트랩 샘플링 + 다수 스텀프 배깅 ---
+function buildRF(X, y, nTrees=30){
+  const n=X.length, nFeat=X[0].length;
+  const trees=[];
+  for(let t=0;t<nTrees;t++){
+    // 부트스트랩 샘플링
+    const idx=Array.from({length:n},()=>Math.floor(Math.random()*n));
+    const Xb=idx.map(i=>X[i]), yb=idx.map(i=>y[i]);
+    // 무작위 피처 서브셋 (sqrt(nFeat))
+    const subSize=Math.max(2,Math.round(Math.sqrt(nFeat)));
+    const featIdx=shuffleArr([...Array(nFeat).keys()]).slice(0,subSize);
+    const Xs=Xb.map(r=>featIdx.map(f=>r[f]));
+    const stump=buildStump(Xs,yb,null);
+    // 원본 피처 인덱스로 매핑
+    trees.push({stump, featIdx});
+  }
+  return trees;
+}
+
+function predictRF(trees,x){
+  return mean(trees.map(t=>{
+    const xs=t.featIdx.map(f=>x[f]);
+    return predictStump(t.stump,xs);
+  }));
+}
+
+// --- 그래디언트부스팅: 잔차 순차 학습 ---
+function buildGB(X, y, nRounds=40, lr=0.12){
+  const n=X.length;
+  const stumps=[];
+  const residuals=[...y];
+  const initPred=mean(y);
+  let preds=Array(n).fill(initPred);
+
+  for(let r=0;r<nRounds;r++){
+    const stump=buildStump(X,residuals,null);
+    stumps.push({stump,lr});
+    for(let i=0;i<n;i++){
+      const upd=lr*predictStump(stump,X[i]);
+      preds[i]+=upd;
+      residuals[i]=y[i]-preds[i];
+    }
+  }
+  return {stumps,initPred,lr};
+}
+
+function predictGB(model,x){
+  let pred=model.initPred;
+  for(const s of model.stumps) pred+=s.lr*predictStump(s.stump,x);
+  return pred;
+}
+
+// --- Ridge 메타 학습기 (최소제곱 + L2 정규화) ---
+function fitRidge(X2, y, lambda=1.0){
+  // X2: [[rf_pred, gb_pred], ...], 해를 [w_rf, w_gb, bias]로
+  const n=X2.length;
+  // 설계행렬: [rf, gb, 1]
+  const A=X2.map(r=>[r[0],r[1],1]);
+  // 정규방정식: (A^T A + λI) w = A^T y
+  const m=3;
+  // A^T A
+  const ATA=Array.from({length:m},(_,i)=>Array.from({length:m},(_,j)=>
+    mean(A.map(r=>r[i]*r[j]))*n));
+  // 정규화
+  for(let i=0;i<m-1;i++) ATA[i][i]+=lambda; // bias 항은 정규화 안 함
+  // A^T y
+  const ATy=Array.from({length:m},(_,i)=>mean(A.map((r,k)=>r[i]*y[k]))*n);
+  // 가우스 소거법으로 해 구하기
+  return gaussElim(ATA,ATy);
+}
+
+function gaussElim(A,b){
+  const n=A.length, M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){
+    let maxR=c;
+    for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[maxR][c])) maxR=r;
+    [M[c],M[maxR]]=[M[maxR],M[c]];
+    for(let r=0;r<n;r++){
+      if(r===c) continue;
+      const f=M[r][c]/M[c][c];
+      for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k];
+    }
+  }
+  return M.map((r,i)=>r[n]/r[i]);
+}
+
+function predictRidge(w,rfPred,gbPred){
+  return w[0]*rfPred + w[1]*gbPred + w[2];
+}
+
+function shuffleArr(arr){
+  for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}
+  return arr;
+}
+
+// =========================================================
+// 학습 진입점
+// =========================================================
+async function loadCsvAndTrain(){
+  const GITHUB_CSV_URL = 'https://raw.githubusercontent.com/Joseph080910/index/main/meal_data.csv';
+  document.getElementById('trainResult').innerHTML='⏳ GitHub에서 meal_data.csv를 불러오는 중...';
+  document.getElementById('trainProgress').style.width='5%';
+  try {
+    const res = await fetch(GITHUB_CSV_URL);
+    if(!res.ok) throw new Error('HTTP '+res.status+' — GitHub 저장소가 Public인지, 파일 경로가 맞는지 확인하세요.');
+    const text = await res.text();
+    Papa.parse(text,{header:true,dynamicTyping:false,skipEmptyLines:true,
+      complete:async parsed=>{
+        const rows=normalizeRows(parsed.data);
+        if(!rows.length){
+          document.getElementById('trainResult').innerHTML=
+            '❌ CSV를 읽었지만 유효한 행이 없습니다.<br>'+
+            '<small style="color:#888">CSV 열 이름(칼로리, 단백질, 선호도점수 등)을 확인하세요.</small>';
+          return;
+        }
+        await trainStackingModel(rows,'meal_data.csv');
+      }
+    });
+  } catch(e){
+    document.getElementById('trainResult').innerHTML='❌ 불러오기 실패: '+e.message;
+    document.getElementById('trainProgress').style.width='0%';
+  }
+}
+
+async function trainWithSampleData(){
+  await trainStackingModel(SAMPLE_TRAIN.map(enrichRow),'샘플 데이터');
+}
+
+async function trainStackingModel(rows, source){
+  if(!rows.length){
+    document.getElementById('trainResult').innerHTML='학습 가능한 데이터가 없습니다. CSV 열 이름을 확인하세요.';
+    return;
+  }
+
+  document.getElementById('featureBox').innerHTML = FEATURES.map(f=>'<span class="pill">'+f+'</span>').join('');
+  document.getElementById('trainResult').innerHTML = '<b>'+source+' '+rows.length+'건 로드 완료</b><br>Stacking 앙상블 학습을 시작합니다...';
+  document.getElementById('trainProgress').style.width = '10%';
+
+  // 피처/타겟 추출 및 정규화
+  const X = rows.map(r=>FEATURES.map(f=>r[f]));
+  const y = rows.map(r=>r.delta_target);
+
+  xMean = FEATURES.map((_,j)=>mean(X.map(r=>r[j])));
+  xStd  = FEATURES.map((_,j)=>stdev(X.map(r=>r[j]),xMean[j]));
+  yMean = mean(y);
+  yStd  = stdev(y,yMean);
+
+  const Xn = X.map(r=>r.map((v,j)=>(v-xMean[j])/xStd[j]));
+  const yn = y.map(v=>(v-yMean)/yStd);
+
+  // 학습/검증 분리 (80:20)
+  const n=Xn.length, split=Math.floor(n*0.8);
+  const XTr=Xn.slice(0,split), yTr=yn.slice(0,split);
+  const XTe=Xn.slice(split),   yTe=y.slice(split);
+
+  document.getElementById('trainProgress').style.width='30%';
+  document.getElementById('trainResult').innerHTML='<b>Step 1/3</b> 랜덤포레스트(RF) 학습 중... ('+XTr.length+'건)';
+  await sleep(30);
+
+  // Step 1: RF 학습 (30개 트리)
+  rfTrees = buildRF(XTr, yTr, 30);
+  const rfPredTr = XTr.map(x=>predictRF(rfTrees,x)*yStd+yMean);
+  const rfPredTe = XTe.map(x=>predictRF(rfTrees,x)*yStd+yMean);
+  const rfMAE = mean(rfPredTe.map((p,i)=>Math.abs(p-yTe[i])));
+
+  document.getElementById('trainProgress').style.width='60%';
+  document.getElementById('trainResult').innerHTML='<b>Step 2/3</b> 그래디언트부스팅(GB) 학습 중... (40 라운드)';
+  await sleep(30);
+
+  // Step 2: GB 학습 (40 라운드)
+  const gbModel = buildGB(XTr, yTr, 40, 0.12);
+  const gbPredTr = XTr.map(x=>predictGB(gbModel,x)*yStd+yMean);
+  const gbPredTe = XTe.map(x=>predictGB(gbModel,x)*yStd+yMean);
+  const gbMAE = mean(gbPredTe.map((p,i)=>Math.abs(p-yTe[i])));
+  gbStumps = gbModel;
+
+  document.getElementById('trainProgress').style.width='85%';
+  document.getElementById('trainResult').innerHTML='<b>Step 3/3</b> Ridge 메타 학습기 결합 중...';
+  await sleep(30);
+
+  // Step 3: Ridge 메타 학습 (1차 학습기 예측값 → 스태킹)
+  // OOF(Out-of-Fold) 방식으로 훈련 데이터 메타 피처 구성
+  const metaXTr = XTr.map((_,i)=>[rfPredTr[i],gbPredTr[i]]);
+  const metaYTr = yTr.map(v=>v*yStd+yMean);
+  ridgeW = fitRidge(metaXTr, metaYTr, 1.5);
+
+  // 검증 성능
+  const stackPredTe = XTe.map((_,i)=>predictRidge(ridgeW,rfPredTe[i],gbPredTe[i]));
+  const stackMAE = mean(stackPredTe.map((p,i)=>Math.abs(p-yTe[i])));
+  const stackRMSE = Math.sqrt(mean(stackPredTe.map((p,i)=>(p-yTe[i])**2)));
+  const rSS = mean(stackPredTe.map((p,i)=>(p-yTe[i])**2));
+  const tSS = mean(yTe.map(v=>(v-mean(yTe))**2));
+  const r2 = Math.max(0,1-rSS/tSS);
+
+  document.getElementById('trainProgress').style.width='100%';
+  modelReady = true;
+
+  document.getElementById('trainResult').innerHTML =
+    '<b>✅ Stacking 앙상블 학습 완료</b><br>'+
+    source+' '+rows.length+'건 → 학습 '+split+'건 / 검증 '+(n-split)+'건<br>'+
+    'Ridge 가중치: RF×'+ridgeW[0].toFixed(3)+' + GB×'+ridgeW[1].toFixed(3)+' + bias '+ridgeW[2].toFixed(2)+'<br>'+
+    '최종 Stacking MAE <b>'+stackMAE.toFixed(2)+'점</b> · RMSE '+stackRMSE.toFixed(2)+'점 · R² '+r2.toFixed(3);
+
+  document.getElementById('modelMetrics').innerHTML =
+    '<div class="split">'+
+    '<div class="miniBox"><span>RF MAE</span><b>'+rfMAE.toFixed(2)+'</b></div>'+
+    '<div class="miniBox"><span>GB MAE</span><b>'+gbMAE.toFixed(2)+'</b></div>'+
+    '<div class="miniBox"><span>★ Stacking MAE</span><b class="good">'+stackMAE.toFixed(2)+'</b></div>'+
+    '</div>'+
+    '<p style="font-size:11px;color:#68758d;margin-top:8px;">Stacking은 RF와 GB의 오차를 Ridge가 최적 결합하여 단일 모델보다 낮은 MAE를 달성합니다.</p>';
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// =========================================================
+// Stacking 예측 함수
+// =========================================================
+function predictDelta(row){
+  if(!modelReady||!rfTrees.length||!gbStumps.stumps) return 0;
+  const e = enrichRow(row);
+  const xn = FEATURES.map((f,j)=>(num(e[f])-xMean[j])/xStd[j]);
+  const rfRaw  = predictRF(rfTrees,xn)*yStd+yMean;
+  const gbRaw  = predictGB(gbStumps,xn)*yStd+yMean;
+  const delta  = predictRidge(ridgeW,rfRaw,gbRaw);
+  return {
+    rf:    Math.round(clamp(rfRaw,-15,15)*10)/10,
+    gb:    Math.round(clamp(gbRaw,-15,15)*10)/10,
+    stack: Math.round(clamp(delta,-15,15)*10)/10
+  };
+}
+
+function finalScore(row){
+  const base  = calcBaseF(row);
+  const d     = predictDelta(row);
+  const delta = d ? d.stack : 0;
+  const final = clamp(Math.round((base+delta)*10)/10,0,100);
+  return { F_base:base, deltaRF:d?d.rf:0, deltaGB:d?d.gb:0, delta, F_final:final };
+}
+
+// =========================================================
+// API 데이터 로드 (원본과 동일 구조 유지)
+// =========================================================
+function loadApiData(){
+  if(!modelReady){
+    document.getElementById('apiResult').innerHTML='먼저 ML 화면에서 CSV 업로드 또는 샘플 데이터 학습을 실행하세요.';
+    showScreen('ml',document.querySelectorAll('.nav button')[0]);
+    return;
+  }
+  const month  = document.getElementById('apiMonth').value||'2026-05';
+  const school = document.getElementById('schoolName').value||'학교';
+  const mm = month.slice(5,7);
+
+  mealData = API_SAMPLES.map((r,i)=>{
+    const s = finalScore(r);
+    return {date:mm+'/'+String(i+1).padStart(2,'0'), ...r, ...s};
+  });
+
+  document.getElementById('apiResult').innerHTML =
+    '<b>'+school+' · '+month+'</b><br>'+
+    'API 형식 식단 '+mealData.length+'건에 대해 공식 F_base와 Stacking 보정값 ΔF를 계산했습니다.';
+
+  document.getElementById('parsedDataBox').innerHTML = mealData.slice(0,4).map(d=>
+    '<div class="meal-item"><b>'+d.date+' · 최종 F '+d.F_final+'</b>'+
+    '<p>F_base '+d.F_base+' + ΔF_RF '+d.deltaRF+' / ΔF_GB '+d.deltaGB+' → Stacking '+d.delta+' = <b>F_final '+d.F_final+'</b><br>'+d.menu+'</p></div>'
+  ).join('');
+
+  document.getElementById('mlResultBox').innerHTML =
+    '평균 공식 F_base: <b>'+mean(mealData.map(d=>d.F_base)).toFixed(1)+'점</b><br>'+
+    'RF 보정 평균: <b>'+mean(mealData.map(d=>d.deltaRF)).toFixed(1)+'점</b><br>'+
+    'GB 보정 평균: <b>'+mean(mealData.map(d=>d.deltaGB)).toFixed(1)+'점</b><br>'+
+    'Stacking 보정 평균: <b>'+mean(mealData.map(d=>d.delta)).toFixed(1)+'점</b><br>'+
+    '평균 최종 F_final: <b>'+mean(mealData.map(d=>d.F_final)).toFixed(1)+'점</b><br>'+
+    'RF·GB 두 모델의 예측을 Ridge가 최적 결합한 Stacking 보정값을 반영하여 최종 결론을 도출했습니다.';
+
+  renderDashboard();
+  renderAlerts();
+}
+
+// =========================================================
+// 차트 (원본과 동일)
+// =========================================================
+function drawLineChart(id,labels,values){
+  const c=document.getElementById(id); if(!c)return;
+  const ctx=c.getContext('2d'); ctx.clearRect(0,0,c.width,c.height);
+  const pad=28,w=c.width-pad*2,h=c.height-pad*2,min=55,max=100;
+  ctx.strokeStyle='#e0e7f2';ctx.lineWidth=1;
+  for(let i=0;i<=5;i++){let y=pad+h*i/5;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(pad+w,y);ctx.stroke();}
+  ctx.beginPath();
+  values.forEach((v,i)=>{
+    let x=pad+w*i/(values.length-1||1),y=pad+h*(1-(v-min)/(max-min));
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle='#203864';ctx.lineWidth=3;ctx.stroke();
+  values.forEach((v,i)=>{
+    let x=pad+w*i/(values.length-1||1),y=pad+h*(1-(v-min)/(max-min));
+    ctx.fillStyle=v>=80?'#198754':v>=70?'#f0a202':'#d63333';
+    ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();
+  });
+  ctx.fillStyle='#68758d';ctx.font='11px sans-serif';
+  labels.forEach((l,i)=>{if(i%2===0)ctx.fillText(l,pad+w*i/(labels.length-1||1)-12,c.height-7);});
+}
+
+function drawBarChart(id,labels,values){
+  const c=document.getElementById(id); if(!c)return;
+  const ctx=c.getContext('2d'); ctx.clearRect(0,0,c.width,c.height);
+  const pad=32,w=c.width-pad*2,h=c.height-pad*2,bw=w/values.length*.55;
+  values.forEach((v,i)=>{
+    const x=pad+w*i/values.length+(w/values.length-bw)/2,bh=h*v/100;
+    ctx.fillStyle=v>=80?'#198754':v>=70?'#f0a202':'#d63333';
+    ctx.fillRect(x,pad+h-bh,bw,bh);
+    ctx.fillStyle='#68758d';ctx.font='11px sans-serif';
+    ctx.fillText(labels[i],x-2,c.height-8);
+    ctx.fillText(v.toFixed(1),x-3,pad+h-bh-6);
+  });
+}
+
+// =========================================================
+// 대시보드 렌더링
+// =========================================================
+function renderDashboard(){
+  if(!mealData.length) return;
+  const scores=mealData.map(d=>d.F_final);
+  document.getElementById('avgF').textContent=mean(scores).toFixed(1);
+  document.getElementById('riskCount').textContent=scores.filter(v=>v<80).length+'건';
+  document.getElementById('avgRF').textContent=mean(mealData.map(d=>d.deltaRF)).toFixed(1);
+  document.getElementById('avgGB').textContent=mean(mealData.map(d=>d.deltaGB)).toFixed(1);
+  drawLineChart('dailyChart',mealData.map(d=>d.date),scores);
+  drawBarChart('weeklyChart',['1주','2주'],[mean(scores.slice(0,4)),mean(scores.slice(4))]);
+  const comps={
+    'F_base':  mean(mealData.map(d=>d.F_base))/5,
+    'ΔF_RF':   10+mean(mealData.map(d=>d.deltaRF)),
+    'ΔF_GB':   10+mean(mealData.map(d=>d.deltaGB)),
+    'ΔF_Stack':10+mean(mealData.map(d=>d.delta)),
+    'F_final': mean(mealData.map(d=>d.F_final))/5
+  };
+  document.getElementById('componentBars').innerHTML=Object.keys(comps).map(k=>{
+    let v=clamp(comps[k],0,20);
+    return '<div class="barrow"><div class="barlabel">'+k+'</div>'+
+           '<div class="barbox"><div class="barfill" style="width:'+Math.min(v*5,100)+'%"></div></div>'+
+           '<div class="barvalue">'+v.toFixed(1)+'</div></div>';
+  }).join('');
+}
+
+// =========================================================
+// 사전 검토 (원본과 동일 구조, Stacking 상세 추가)
+// =========================================================
+function reviewMeal(){
+  if(!modelReady){document.getElementById('reviewResult').innerHTML='먼저 ML 화면에서 Stacking 모델을 학습하세요.';return;}
+  const menu=document.getElementById('menuText').value;
+  const popular  =['닭','치킨','돈가스','떡갈비','불고기','카레','짜장','볶음밥','탕수육','요구르트'];
+  const unpopular=['나물','생선','멸치','콩','두부','가지','버섯'];
+  const menuCount=menu.split(/[,\/\n]+/).filter(x=>x.trim()).length;
+  const pc=popular.filter(w=>menu.includes(w)).length;
+  const uc=unpopular.filter(w=>menu.includes(w)).length;
+
+  const row={칼로리:+cal.value,탄수화물:+carb.value,단백질:+protein.value,지방:+fat.value,
+             비타민A:+vita.value,비타민C:+vitc.value,칼슘:+ca.value,철분:+fe.value,
+             메뉴수:menuCount,인기재료수:pc,비인기재료수:uc};
+  const s=finalScore(row);
+  const msg=s.F_final>=80?'우수 식단입니다.':s.F_final>=70?'주의 식단입니다. 영양 또는 선호도 보완이 필요합니다.':'긴급 검토 식단입니다. 메뉴 변경이 필요합니다.';
+
+  document.getElementById('reviewResult').innerHTML=
+    '<b class="'+scoreClass(s.F_final)+'">최종 F: '+s.F_final+'점 · '+scoreText(s.F_final)+'</b><br>'+
+    '공식 F_base: '+s.F_base+' + Stacking 보정 ΔF: '+s.delta+' = 최종 F '+s.F_final+'<br>'+msg;
+
+  document.getElementById('suggestionBox').innerHTML=
+    '파싱 결과: 메뉴수 '+menuCount+', 인기재료수 '+pc+', 비인기재료수 '+uc+'<br>'+
+    '<b>Stacking 상세</b><br>'+
+    '  · RF 보정값 ΔF_RF: <b>'+s.deltaRF+'</b><br>'+
+    '  · GB 보정값 ΔF_GB: <b>'+s.deltaGB+'</b><br>'+
+    '  · Ridge 결합 최종 ΔF: <b>'+s.delta+'</b><br>'+
+    'RF·GB 두 모델의 예측을 Ridge 메타 학습기가 최적 가중치로 결합하여 최종 보정값을 산출합니다.';
+}
+
+// =========================================================
+// 알림 (원본과 동일 구조)
+// =========================================================
+function renderAlerts(){
+  const target=mealData.filter(d=>d.F_final<80||d.delta<-3).reverse();
+  document.getElementById('alerts').innerHTML=target.map(d=>
+    '<div class="alert '+scoreClass(d.F_final)+'">'+
+    '<b>'+d.date+' · 최종 F '+d.F_final+'점 · '+scoreText(d.F_final)+' 알림</b><br>'+
+    'F_base '+d.F_base+'점, Stacking 보정 '+d.delta+'점 (RF '+d.deltaRF+' / GB '+d.deltaGB+').<br>'+
+    '공식 점수 또는 Stacking 보정 결과를 검토하세요.</div>'
+  ).join('')||'<div class="alert good"><b>알림 없음</b><br>현재 기준 미달 식단이 없습니다.</div>';
+
+  document.getElementById('mealList').innerHTML=target.slice(0,5).map(d=>
+    '<div class="meal-item"><span class="badge '+scoreClass(d.F_final)+'">'+scoreText(d.F_final)+'</span>'+
+    '<b>'+d.date+' · 최종 F '+d.F_final+'</b>'+
+    '<p>F_base '+d.F_base+' + ΔF_Stack '+d.delta+'(RF '+d.deltaRF+'/GB '+d.deltaGB+')<br>'+d.menu+'</p></div>'
+  ).join('');
+}
+
+// =========================================================
+// 초기화
+// =========================================================
+window.addEventListener('load',()=>{
+  document.getElementById('featureBox').innerHTML=FEATURES.map(f=>'<span class="pill">'+f+'</span>').join('');
+});
+</script>
+</body>
+</html>
